@@ -14,6 +14,11 @@ import {
   Text,
 } from 'react-native';
 import padStart from 'lodash/padStart';
+import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons"
+import { Spinner } from 'native-base';
+import { Dimensions } from 'react-native';
+
+const { width, height } = Dimensions.get('screen')
 
 export default class VideoPlayer extends Component {
   static defaultProps = {
@@ -31,8 +36,6 @@ export default class VideoPlayer extends Component {
     volume: 1,
     title: '',
     rate: 1,
-    showTimeRemaining: true,
-    showHours: false,
   };
 
   constructor(props) {
@@ -53,8 +56,7 @@ export default class VideoPlayer extends Component {
 
       isFullscreen:
         this.props.isFullScreen || this.props.resizeMode === 'cover' || false,
-      showTimeRemaining: this.props.showTimeRemaining,
-      showHours: this.props.showHours,
+      showTimeRemaining: true,
       volumeTrackWidth: 0,
       volumeFillWidth: 0,
       seekerFillWidth: 0,
@@ -70,6 +72,8 @@ export default class VideoPlayer extends Component {
       currentTime: 0,
       error: false,
       duration: 0,
+      isVideoClicked: true,
+      doubleClickCount: 0,
     };
 
     /**
@@ -97,6 +101,8 @@ export default class VideoPlayer extends Component {
       onLoadStart: this._onLoadStart.bind(this),
       onProgress: this._onProgress.bind(this),
       onSeek: this._onSeek.bind(this),
+      doubleTapSeekVideoPlus: this._doubleTapSeekVideoPlus.bind(this),
+      doubleTapSeekVideoMinus: this._doubleTapSeekVideoMinus.bind(this),
       onLoad: this._onLoad.bind(this),
       onPause: this.props.onPause,
       onPlay: this.props.onPlay,
@@ -132,7 +138,7 @@ export default class VideoPlayer extends Component {
     /**
      * Various animations
      */
-    const initialValue = this.props.showOnStart ? 1 : 0;
+    const initialValue = this.props.showOnStart ? 1 : 1;
 
     this.animations = {
       bottomControl: {
@@ -367,7 +373,8 @@ export default class VideoPlayer extends Component {
         useNativeDriver: false,
       }),
       Animated.timing(this.animations.topControl.marginTop, {
-        toValue: -100,
+        // toValue: -100,
+        toValue: 0,
         duration: this.props.controlAnimationTiming,
         useNativeDriver: false,
       }),
@@ -377,7 +384,8 @@ export default class VideoPlayer extends Component {
         useNativeDriver: false,
       }),
       Animated.timing(this.animations.bottomControl.marginBottom, {
-        toValue: -100,
+        // toValue: -100,
+        toValue: 0,
         duration: this.props.controlAnimationTiming,
         useNativeDriver: false,
       }),
@@ -459,7 +467,6 @@ export default class VideoPlayer extends Component {
   _toggleControls() {
     let state = this.state;
     state.showControls = !state.showControls;
-
     if (state.showControls) {
       this.showControlAnimation();
       this.setControlTimeout();
@@ -467,6 +474,7 @@ export default class VideoPlayer extends Component {
         this.events.onShowControls();
     } else {
       this.hideControlAnimation();
+      this.setState({ isVideoClicked: false });
       this.clearControlTimeout();
       typeof this.events.onHideControls === 'function' &&
         this.events.onHideControls();
@@ -565,22 +573,10 @@ export default class VideoPlayer extends Component {
     const symbol = this.state.showRemainingTime ? '-' : '';
     time = Math.min(Math.max(time, 0), this.state.duration);
 
-    if (!this.state.showHours) {
-      const formattedMinutes = padStart(Math.floor(time / 60).toFixed(0), 2, 0);
-      const formattedSeconds = padStart(Math.floor(time % 60).toFixed(0), 2, 0);
-
-      return `${symbol}${formattedMinutes}:${formattedSeconds}`;
-    }
-
-    const formattedHours = padStart(Math.floor(time / 3600).toFixed(0), 2, 0);
-    const formattedMinutes = padStart(
-      (Math.floor(time / 60) % 60).toFixed(0),
-      2,
-      0,
-    );
+    const formattedMinutes = padStart(Math.floor(time / 60).toFixed(0), 2, 0);
     const formattedSeconds = padStart(Math.floor(time % 60).toFixed(0), 2, 0);
 
-    return `${symbol}${formattedHours}:${formattedMinutes}:${formattedSeconds}`;
+    return `${symbol}${formattedMinutes}:${formattedSeconds}`;
   }
 
   /**
@@ -653,6 +649,46 @@ export default class VideoPlayer extends Component {
     state.currentTime = time;
     this.player.ref.seek(time);
     this.setState(state);
+  }
+
+
+  _doubleTapSeekVideoPlus() {
+    let state = this.state;
+    let time = state.currentTime;
+    const { doubleClickCount } = this.state
+    let backTimer;
+    this.setState({ doubleClickCount: this.state.doubleClickCount += 1 })
+    if (doubleClickCount == 2) {
+        clearTimeout(backTimer)
+        this.seekTo(time + 10)
+        this.setState({ doubleClickCount: 0 })
+    } 
+    else {
+      backTimer = setTimeout(() => {
+        this.setState({ doubleClickCount: 0 })
+        this.events.onScreenTouch()
+      }, 350)
+    }
+
+  }
+
+  _doubleTapSeekVideoMinus() {
+    let state = this.state;
+    let time = state.currentTime;
+    const { doubleClickCount } = this.state
+    let backTimer;
+    this.setState({ doubleClickCount: this.state.doubleClickCount += 1 })
+    if (doubleClickCount == 2) {
+        clearTimeout(backTimer)
+        this.seekTo(time - 10)
+        this.setState({ doubleClickCount: 0 })
+    } 
+    else {
+      backTimer = setTimeout(() => {
+        this.setState({ doubleClickCount: 0 })
+        this.events.onScreenTouch()
+      }, 350)
+    }
   }
 
   /**
@@ -765,7 +801,6 @@ export default class VideoPlayer extends Component {
     this.setVolumePosition(position);
     state.volumeOffset = position;
     this.mounted = true;
-
     this.setState(state);
   }
 
@@ -929,7 +964,9 @@ export default class VideoPlayer extends Component {
         activeOpacity={0.3}
         onPress={() => {
           this.resetControlTimeout();
-          callback();
+          if(callback){
+              callback();
+          }
         }}
         style={[styles.controls.control, style]}>
         {children}
@@ -951,7 +988,7 @@ export default class VideoPlayer extends Component {
   renderTopControls() {
     const backControl = this.props.disableBack
       ? this.renderNullControl()
-      : this.renderBack();
+      : this.renderPlayPause();
     const volumeControl = this.props.disableVolume
       ? this.renderNullControl()
       : this.renderVolume();
@@ -968,18 +1005,8 @@ export default class VideoPlayer extends Component {
             marginTop: this.animations.topControl.marginTop,
           },
         ]}>
-        <ImageBackground
-          source={require('./assets/img/top-vignette.png')}
-          style={[styles.controls.column]}
-          imageStyle={[styles.controls.vignette]}>
-          <SafeAreaView style={styles.controls.topControlGroup}>
-            {backControl}
-            <View style={styles.controls.pullRight}>
-              {volumeControl}
-              {fullscreenControl}
-            </View>
-          </SafeAreaView>
-        </ImageBackground>
+      
+        
       </Animated.View>
     );
   }
@@ -989,11 +1016,8 @@ export default class VideoPlayer extends Component {
    */
   renderBack() {
     return this.renderControl(
-      <Image
-        source={require('./assets/img/back.png')}
-        style={styles.controls.back}
-      />,
-      this.events.onBack,
+      <MaterialCommunityIcons name={this.props.isFullLandScapeScreen ? "fullscreen-exit" :"fullscreen"} color={"#fff"} size={20} />,
+      !this.props.isFullLandScapeScreen ?  this.events.onBack : this.props.onExitFullScreen,
       styles.controls.back,
     );
   }
@@ -1047,9 +1071,9 @@ export default class VideoPlayer extends Component {
     const seekbarControl = this.props.disableSeekbar
       ? this.renderNullControl()
       : this.renderSeekbar();
-    const playPauseControl = this.props.disablePlayPause
+    const BackControl = this.props.disablePlayPause
       ? this.renderNullControl()
-      : this.renderPlayPause();
+      : this.renderBack();
 
     return (
       <Animated.View
@@ -1060,18 +1084,14 @@ export default class VideoPlayer extends Component {
             marginBottom: this.animations.bottomControl.marginBottom,
           },
         ]}>
-        <ImageBackground
-          source={require('./assets/img/bottom-vignette.png')}
-          style={[styles.controls.column]}
-          imageStyle={[styles.controls.vignette]}>
-          {seekbarControl}
           <SafeAreaView
             style={[styles.controls.row, styles.controls.bottomControlGroup]}>
-            {playPauseControl}
-            {this.renderTitle()}
             {timerControl}
+            {BackControl}
+            {/* {playPauseControl} */}
+            {/* {this.renderTitle()} */}
           </SafeAreaView>
-        </ImageBackground>
+          {seekbarControl}
       </Animated.View>
     );
   }
@@ -1120,17 +1140,7 @@ export default class VideoPlayer extends Component {
   /**
    * Render the play/pause button and show the respective icon
    */
-  renderPlayPause() {
-    let source =
-      this.state.paused === true
-        ? require('./assets/img/play.png')
-        : require('./assets/img/pause.png');
-    return this.renderControl(
-      <Image source={source} />,
-      this.methods.togglePlayPause,
-      styles.controls.playPause,
-    );
-  }
+
 
   /**
    * Render our title...if supplied.
@@ -1165,30 +1175,31 @@ export default class VideoPlayer extends Component {
   /**
    * Show loading icon
    */
+
+
+   renderPlayPause() {
+    let name = this.state.paused === true ? "play" : "pause";
+    return this.renderControl(
+      <MaterialCommunityIcons onPress={this.methods.togglePlayPause} name={name} size={65} color={"#fff"} />,
+    );
+  }
+
   renderLoader() {
     if (this.state.loading) {
       return (
         <View style={styles.loader.container}>
-          <Animated.Image
-            source={require('./assets/img/loader-icon.png')}
-            style={[
-              styles.loader.icon,
-              {
-                transform: [
-                  {
-                    rotate: this.animations.loader.rotate.interpolate({
-                      inputRange: [0, 360],
-                      outputRange: ['0deg', '360deg'],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
+          <Spinner color={"#fff"} size={50} />
         </View>
       );
     }
-    return null;
+    else{
+      return (
+        <Animated.View style={[styles.loader.container, {opacity: this.animations.bottomControl.opacity, zIndex: this.animations.bottomControl.opacity.__getValue() > .5 ? 10 : 0}]}>
+           {this.renderPlayPause()}
+        </Animated.View>
+      )
+    }
+    // return null;
   }
 
   renderError() {
@@ -1211,7 +1222,9 @@ export default class VideoPlayer extends Component {
    */
   render() {
     return (
-      <TouchableWithoutFeedback
+      <>
+     
+        <TouchableWithoutFeedback
         onPress={this.events.onScreenTouch}
         style={[styles.player.container, this.styles.containerStyle]}>
         <View style={[styles.player.container, this.styles.containerStyle]}>
@@ -1232,12 +1245,46 @@ export default class VideoPlayer extends Component {
             style={[styles.player.video, this.styles.videoStyle]}
             source={this.props.source}
           />
-          {this.renderError()}
-          {this.renderLoader()}
-          {this.renderTopControls()}
-          {this.renderBottomControls()}
+             <Animated.View style={{ height: '100%', width: '100%', backgroundColor: this.state.isVideoClicked ? 'rgba( 0, 0, 0, 0.6 )' : 'rgba( 0, 0, 0, 0.0 )', opacity: this.animations.bottomControl.opacity, zIndex: 1}}>
+                  
+                    {this.renderError()}
+                    {this.renderLoader()}
+                      {this.renderTopControls()}
+                      {this.props.isFullLandScapeScreen && (
+                        <View style={[{ position: 'absolute', top: 25, left: 40, zIndex: 10, width: width - (width / 5)}]}>
+                            <Text numberOfLines={1} ellipsizeMode='tail' style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 20 }}>{this.props.title} but ok baby yes bitches</Text>
+                        </View>
+                      )}
+
+                       <View style={[{height: 10, width: 10, position: 'absolute', top: 20, left: -10, zIndex: this.animations.bottomControl.opacity.__getValue() > .5 ? 10 : 0}]}>
+                        {this.props.isFullLandScapeScreen ? this.renderFullscreen() : null}
+                    </View>
+                    <View>
+                
+                    </View>
+                    <View style={{ zIndex: this.animations.bottomControl.opacity.__getValue() > .5 ? 10 : 0 }}>
+                      {this.renderBottomControls()}
+                    </View>
+
+                  {/* Double Tap to seek the video */}
+                  <View style={{height: '100%', width: '100%', position: 'absolute', flexDirection: 'row'}}>
+                    <TouchableWithoutFeedback onPress={this.events.doubleTapSeekVideoMinus}>
+                      <View style={{ backgroundColor: 'transparent', flex: 1 }}></View>
+                    </TouchableWithoutFeedback>
+                    <TouchableWithoutFeedback onPress={this.events.doubleTapSeekVideoPlus}>
+                      <View style={{ backgroundColor: 'transparent', flex: 1 }}></View>
+                    </TouchableWithoutFeedback>
+                  </View> 
+
+          </Animated.View>
+
+                
+
+            {/*  */}
+     
         </View>
       </TouchableWithoutFeedback>
+      </>
     );
   }
 }
@@ -1286,13 +1333,21 @@ const styles = {
   }),
   loader: StyleSheet.create({
     container: {
-      position: 'absolute',
-      top: 0,
-      right: 0,
-      bottom: 0,
-      left: 0,
+      // position: 'absolute',
+      // top: '20%',
+      // top: 0,
+      // right: 0,
+      // bottom: 0,
+      // left: 0,
+      marginLeft: 'auto',
+      marginRight: 'auto',
       alignItems: 'center',
       justifyContent: 'center',
+      top: '30%',
+      // zIndex: 10,
+      // backgroundColor: '#fff',
+      height: 90,
+      width: 90
     },
   }),
   controls: StyleSheet.create({
@@ -1333,26 +1388,29 @@ const styles = {
       justifyContent: 'flex-start',
     },
     bottom: {
-      alignItems: 'stretch',
-      flex: 2,
-      justifyContent: 'flex-end',
+      // alignItems: 'stretch',
+      // flex: 2,
+      // justifyContent: 'flex-end',
     },
     topControlGroup: {
-      alignSelf: 'stretch',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      flexDirection: 'row',
-      width: null,
-      margin: 12,
-      marginBottom: 18,
+      // alignSelf: 'stretch',
+      // alignItems: 'center',
+      // justifyContent: 'space-between',
+      // flexDirection: 'row',
+      // width: null,
+      position: 'absolute',
+      bottom: '110%'
+      // top: 0
+      // margin: 12,
+      // marginBottom: 18,
     },
     bottomControlGroup: {
       alignSelf: 'stretch',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginLeft: 12,
-      marginRight: 12,
-      marginBottom: 0,
+      // marginLeft: 12,
+      // marginRight: 12,
+      marginBottom: -10,
     },
     volume: {
       flexDirection: 'row',
@@ -1429,7 +1487,7 @@ const styles = {
     },
     fill: {
       backgroundColor: '#FFF',
-      height: 1,
+      height: 2,
       width: '100%',
     },
     handle: {
