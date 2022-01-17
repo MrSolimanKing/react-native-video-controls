@@ -1185,16 +1185,19 @@ export default class VideoPlayer extends Component {
   }
 
   renderLoader() {
+    const top = {
+      top: this.props.isFullLandScapeScreen ? '30%' : '20%'
+    }
     if (this.state.loading) {
       return (
-        <View style={styles.loader.container}>
+        <View style={[styles.loader.container, top]}>
           <Spinner color={"#fff"} size={50} />
         </View>
       );
     }
     else{
       return (
-        <Animated.View style={[styles.loader.container, {opacity: this.animations.bottomControl.opacity, zIndex: this.animations.bottomControl.opacity.__getValue() > .5 ? 10 : 0}]}>
+        <Animated.View style={[styles.loader.container, top, {opacity: this.animations.bottomControl.opacity, zIndex: this.animations.bottomControl.opacity.__getValue() > .5 ? 10 : 0}]}>
            {this.renderPlayPause()}
         </Animated.View>
       )
@@ -1343,7 +1346,7 @@ const styles = {
       marginRight: 'auto',
       alignItems: 'center',
       justifyContent: 'center',
-      top: '30%',
+      // top: '30%',
       // zIndex: 10,
       // backgroundColor: '#fff',
       height: 90,
